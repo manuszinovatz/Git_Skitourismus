@@ -1,0 +1,151 @@
+---
+title: "Krankenhausbetten"
+author: "von Manuela Szinovatz"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Auslastung der Normal- und Intensivbetten für Covid Patienten
+
+Seit 1. April 2020 werden die belegten und freien Normal- sowie Intensivbetten täglich veröffentlicht. Daraus ergibt sich die Auslastung mit deutlichen Unterschieden in den jeweiligen Bundesländern mit Höchstwerten etwa bei der Auslastung in den Intensivstationen von über 90 Prozent Ende November in Tirol und Oberösterreich.
+
+## Tägliche Situation bei den Intensivbetten
+
+
+
+```{r Krankenhausbetten, echo=F, warning=F, message=F}
+
+# load packages
+library(readr)
+library(tidyr)
+library(dplyr)
+library(readxl)
+library(stringr)
+library(lubridate)
+library(DT)
+library(sf)
+library(tigris)
+library(leaflet)
+library(stringr)
+library(scales)
+library(ggplot2)
+library(ggthemes)
+library(forcats)
+
+#Tabelle laden - Working Directory Desktop/Datenjournalismus/Covid_Data
+
+Covid <- read.csv("Covid_Daten/CovidFallzahlen.csv", sep = ";", stringsAsFactors=FALSE) %>%
+  select(-MeldeDatum) %>%
+  select(Meldedatum=Meldedat,
+         Bundesland,
+         `Tests Gesamt`=TestGesamt,
+         'Belegte Betten'=FZHosp,
+         'Belegte Intensivbetten'=FZICU,
+         'Freie Betten'=FZHospFree,
+         'Freie Intensivbetten'=FZICUFree,
+         'Bundesland ID'=BundeslandID)
+
+Covid$Meldedatum <- dmy(Covid$Meldedatum)
+
+Betten <- Covid %>%
+  select(-'Tests Gesamt', -'Bundesland ID')
+
+Betten$Bundesland <- str_replace(Betten$Bundesland, "Alle", "Österreich")
+
+Betten <- Betten %>%
+  mutate(`Betten Gesamt`=`Belegte Betten`+`Freie Betten`) %>%
+  mutate(`Intensivbetten Gesamt`=`Belegte Intensivbetten`+`Freie Intensivbetten`) %>%
+  mutate(`% Auslastung Betten`=round(`Belegte Betten`/`Betten Gesamt`,4)*100) %>%
+  mutate(`% Kapazität Betten`=round(`Freie Betten`/`Betten Gesamt`,4)*100) %>%
+  mutate(`% Auslastung Intensivbetten`=round(`Belegte Intensivbetten`/`Intensivbetten Gesamt`,4)*100) %>%
+  mutate(`% Kapazität Intensivbetten`=round(`Freie Intensivbetten`/`Intensivbetten Gesamt`,4)*100) 
+
+Intensivbetten <- Betten %>%
+  select(Meldedatum, Bundesland,
+         `Belegte Intensivbetten`, `Freie Intensivbetten`, `Intensivbetten Gesamt`, 
+         `% Auslastung Intensivbetten`, `% Kapazität Intensivbetten`)
+
+datatable(Intensivbetten)
+
+```
+
+
+
+## Tägliche Situation bei den Normalbetten
+
+
+
+```{r Intensivbetten, echo=F, warning=F, message=F}
+
+#Tabelle laden - Working Directory Desktop/Datenjournalismus/Covid_Data
+
+Normalbetten <- Betten %>%
+  select(Meldedatum, Bundesland, `Belegte Betten`, `Freie Betten`, `Betten Gesamt`, 
+         `% Auslastung Betten`, `% Kapazität Betten`)
+
+datatable(Normalbetten)
+
+```
+
+
+
+
+## Auslastung der Intensivbetten im Herbst/Winter
+
+Oberösterreich und Tirol weisen mit 94 Prozent Auslastung der Intensivbetten extrem hohe Spitzenwerte aus. Vergleicht man Tirol mit dem österreichweiten Durchschnitt, sieht man einen eindeutig steileren und früheren Anstieg der benötigten Intensivbetten schon von Oktober weg. Erst Anfang/Mitte Dezember beginnt sich die Situation langsam zu entspannen. Auch die Betten in der Steiermark waren im Herbst überdurchschnittlich stark ausgelastet.
+
+
+
+```{r Grafik Bdl Auswahl, echo=F, warning=F, message=F}
+
+Bdl_Auswahl <- Betten %>%
+  filter(Bundesland %in% c("Österreich", "Steiermark", "Tirol")) %>%
+  filter(Meldedatum>="2020-08-01")
+
+ggplot(data=Bdl_Auswahl,
+       aes(x=Meldedatum,
+           y=`% Auslastung Intensivbetten`,
+           color=Bundesland)) +
+  geom_line()+
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c("2020-09-01","2021-02-14"))) +
+  labs(x="Datum",
+       y="Auslastung",
+       title="Auslastung der Intensivbetten in Österreich",
+       caption="Quelle: Bundesministerium für Soziales, Gesundheit, Pflege und Konsumentenschutz (BMSGPK)")
+
+
+```
+
+
+
+
+Wien liegt Ende November/Anfang Dezember am deutlichsten unter dem Österreichschnitt mit einer Maximalauslastung von 43 Prozent am 15. Dezember. Tirols Intensivbetten waren zum selben Zeitpunkt dagegen zu 80 Prozent belegt. Der Höchstwert in Gesamtösterreich war mit 60 Prozent am 27.11. erreicht.
+
+
+```{r Wien, echo=F, warning=F, message=F}
+
+
+Bdl_Auswahl <- Betten %>%
+  filter(Bundesland %in% c("Österreich", "Wien")) %>%
+  filter(Meldedatum>="2020-08-01")
+
+ggplot(data=Bdl_Auswahl,
+       aes(x=Meldedatum,
+           y=`% Auslastung Intensivbetten`,
+           color=Bundesland)) +
+  geom_line()+
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c("2020-09-01","2021-02-14"))) +
+  labs(x="Datum",
+       y="Auslastung",
+       title="Auslastung der Intensivbetten in Österreich",
+       caption="Quelle: Bundesministerium für Soziales, Gesundheit, Pflege und Konsumentenschutz (BMSGPK)")
+
+```
+
+
