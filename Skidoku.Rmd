@@ -1,0 +1,100 @@
+---
+title: "Skidoku Daten"
+author: "von Manuela Szinovatz"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Tabelle Schneemengen in Wien
+
+Die Schneemengen nehmen kontinuierlich ab, in Wien werden Wetterdaten auf der Hohen Warte gemessen. Während 1969 ein Rekordwert von 224cm Neuschnee gefallen ist, beträgt die Neuschneemenge 2020 nur noch 3cm.
+
+```{r Schneedaten, echo=F, warning=F, message=F}
+
+# load packages
+library(readr)
+library(tidyr)
+library(dplyr)
+library(readxl)
+library(stringr)
+library(lubridate)
+library(DT)
+library(sf)
+library(tigris)
+library(leaflet)
+library(stringr)
+library(scales)
+library(ggplot2)
+library(ggthemes)
+library(forcats)
+
+#Tabelle laden - Working Directory Desktop/Datenjournalismus/Skitourismus
+
+Neuschnee <- read.csv("Neuschneesumme.csv", 
+                         sep = ";", stringsAsFactors = F) 
+
+Neuschnee$Datum <- str_c(Neuschnee$Datum, "01")
+Neuschnee$Datum.1 <- str_c(Neuschnee$Datum.1, "01")
+Neuschnee$Datum.2 <- str_c(Neuschnee$Datum.2, "01")
+Neuschnee$Datum.3 <- str_c(Neuschnee$Datum.3, "01")
+Neuschnee$Datum.4 <- str_c(Neuschnee$Datum.4, "01")
+Neuschnee$Datum.5 <- str_c(Neuschnee$Datum.5, "01")
+
+Neuschnee$Datum <- ymd(Neuschnee$Datum)
+Neuschnee$Datum.1 <- ymd(Neuschnee$Datum.1)
+Neuschnee$Datum.2 <- ymd(Neuschnee$Datum.2)
+Neuschnee$Datum.3 <- ymd(Neuschnee$Datum.3)
+Neuschnee$Datum.4 <- ymd(Neuschnee$Datum.4)
+Neuschnee$Datum.5 <- ymd(Neuschnee$Datum.5)
+
+Hohe_Warte <- Neuschnee %>%
+  select(Datum,
+         Klimastation,
+         Neuschnee) %>%
+  filter(Neuschnee!="-999") %>%
+  mutate(Region="Hohe Warte")
+
+Hohe_Warte_Schnitt <- Hohe_Warte %>%
+  mutate(Jahr=year(Datum),
+         Monat=month(Datum)) %>%
+  select(Jahr, Monat, Klimastation, Neuschnee) %>%
+  group_by(Jahr) %>%
+  summarise(Neuschnee=sum(Neuschnee)) %>%
+  mutate(Vorjahr=lag(Neuschnee)) %>% 
+  mutate('+- cm Neuschnee'=Neuschnee-Vorjahr) %>%
+  select(-Vorjahr)
+
+datatable(Hohe_Warte_Schnitt)
+
+```
+
+
+
+## Abnehmende Schneemengen Wien als Kurve
+
+
+
+
+```{r Neuschnee, echo=F, warning=F, message=F}
+
+ggplot(Hohe_Warte_Schnitt,
+       aes(x=Jahr,
+           y=Neuschnee))+
+  geom_point(col="cadetblue3") + 
+  geom_smooth(method="lm",
+              formula=y~x) +
+  geom_line(col="grey") +
+  scale_x_continuous(breaks=seq(1955,2020,5), limits=c(1955,2020))+
+  labs(x="Jahr",
+       y="Neuschnee in cm",
+       title="Wien Hohe Warte, Seehöhe: 198 m",
+       subtitle="Neuschneemengen seit 1955",
+       caption="Quelle: Zentralanstalt für Meteorologie und Geodynamik (ZAMG)")
+
+```
+
+
