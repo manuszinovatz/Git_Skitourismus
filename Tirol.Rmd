@@ -1,0 +1,321 @@
+---
+title: "Tourismus in Österreich, insbesondere in Tirol"
+author: "von Manuela Szinovatz"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Tourismus in Österreich
+
+Statistik Austria erhebt die Zahlen der Ankünfte und Übernachtungen aufgeschlüsselt nach Bundesländern und Herkunft der Gäste seit November 1973. Tirol empfängt dabei Jahr für Jahr mit Abstand die meisten Gäste hauptsächlich aus Deutschland, auch 2020 hat sich das nicht geändert.
+
+
+```{r Nächtigungen, echo=F, warning=F, message=F}
+
+# load packages
+library(readr)
+library(tidyr)
+library(dplyr)
+library(readxl)
+library(stringr)
+library(lubridate)
+library(DT)
+library(sf)
+library(tigris)
+library(leaflet)
+library(stringr)
+library(scales)
+library(ggplot2)
+library(ggthemes)
+library(forcats)
+
+#Tabelle laden - Working Directory Desktop/Datenjournalismus/Skitourismus
+
+Nächtigungen <- read.csv("OGD_touextsai_Tour_HKL_1.csv", sep = ";", stringsAsFactors = F) %>%
+  mutate(Bundesland=case_when(
+    C.W96.0=="W96-1"~"Burgenland",
+    C.W96.0=="W96-2"~"Kärnten",
+    C.W96.0=="W96-3"~"Niederösterreich",
+    C.W96.0=="W96-4"~"Oberösterreich",
+    C.W96.0=="W96-5"~"Salzburg",
+    C.W96.0=="W96-6"~"Steiermark",
+    C.W96.0=="W96-7"~"Tirol",
+    C.W96.0=="W96-8"~"Vorarlberg",
+    C.W96.0=="W96-9"~"Wien")) %>%
+  select(Monat=C.SDB_TIT.0,
+         Bundesland,
+         Bundesland_Code=C.W96.0,
+         Herkunftsland_Code=C.C93.2,
+         Ankünfte=F.ANK,
+         Übernachtungen=F.UEB)
+
+#Herkunftsländer
+
+#import
+Herkunftsländer <- read.csv("Liste_Herkunftsländer.csv", sep = ";", stringsAsFactors = F) %>%
+  select(Herkunftsland_Code=code,
+         Herkunft=name,
+         Info=de_desc)
+
+Tourismus_Herkunft <- full_join(Nächtigungen, Herkunftsländer) %>%
+  select(Monat,
+         Bundesland,
+         Herkunft,
+         Herkunftsland_Code,
+         Ankünfte,
+         Übernachtungen)
+
+rm(Herkunftsländer)
+rm(Nächtigungen)
+
+#Herkunftsländer bereinigen ab 200305, wenn Österreich ohne Wien (2) und Deutschland (12) nicht mehr dabei sind
+
+Tourismus <- Tourismus_Herkunft %>%
+  filter(Monat>=200305)
+
+Österreich <- Tourismus_Herkunft %>%
+  filter(Herkunftsland_Code %in% c(1, 70, 71, 72, 73, 74, 75, 76, 77, 2)) %>%
+  filter(Monat>=200305) %>%
+  mutate(Herkunftsland=
+           case_when(Herkunft=="Wien <01>" ~ "Österreich",
+                     Herkunft=="Burgenland (ab 05/03) <70>" ~ "Österreich",
+                     Herkunft=="Kärnten (ab 05/03) <71>" ~ "Österreich",
+                     Herkunft=="Niederösterreich (ab 05/03) <72>" ~ "Österreich",
+                     Herkunft=="Oberösterreich (ab 05/03) <73>" ~ "Österreich",
+                     Herkunft=="Salzburg (ab 05/03) <74>" ~ "Österreich",
+                     Herkunft=="Steiermark (ab 05/03) <75>" ~ "Österreich",
+                     Herkunft=="Tirol (ab 05/03) <76>" ~ "Österreich",
+                     Herkunft=="Vorarlberg (ab 05/03) <77>" ~ "Österreich")) %>%
+  select(-Herkunft) %>%
+  rename(Herkunft=Herkunftsland)
+
+Österreich_Tour <- full_join(Österreich, Tourismus)
+
+Tourismus <- Österreich_Tour %>%
+  filter(Herkunft!="Wien <01>",
+         Herkunft!="Burgenland (ab 05/03) <70>",
+         Herkunft!="Kärnten (ab 05/03) <71>",
+         Herkunft!="Niederösterreich (ab 05/03) <72>",
+         Herkunft!="Oberösterreich (ab 05/03) <73>",
+         Herkunft!="Salzburg (ab 05/03) <74>",
+         Herkunft!="Steiermark (ab 05/03) <75>",
+         Herkunft!="Tirol (ab 05/03) <76>",
+         Herkunft!="Vorarlberg (ab 05/03) <77>") %>%
+  select(-Herkunftsland_Code) %>%
+  arrange(desc(Ankünfte))
+
+rm(Österreich)
+rm(Österreich_Tour)
+
+#Deutsche Regionen zu Deutschland zusammenführen
+
+Deutschland <- Tourismus_Herkunft %>%
+  filter(Herkunftsland_Code %in% c(80, 81, 82, 83, 84, 85, 53, 12)) %>%
+  filter(Monat>=200305) %>%
+  mutate(Herkunftsland=
+           case_when(Herkunft=="Bayern (ab 05/03) <80>" ~ "Deutschland",
+                     Herkunft=="Baden Württemberg (ab 05/03) <81>" ~ "Deutschland",
+                     Herkunft=="Nordrhein-Westfalen (ab 05/03) <82>" ~ "Deutschland",
+                     Herkunft=="Mitteldeutschland (ab 05/03) <83>" ~ "Deutschland",
+                     Herkunft=="Norddeutschland (ab 05/03) <84>" ~ "Deutschland",
+                     Herkunft=="Ostdeutschland (ab 05/03) <85>" ~ "Deutschland",
+                     Herkunft=="Berlin (bis 04/91 und ab 05/03) <53>" ~ "Deutschland",
+                     Herkunft=="Deutschland (bis 04/03) <12>" ~ "Deutschland")) %>%
+  select(-Herkunft) %>%
+  rename(Herkunft=Herkunftsland)
+
+Deutschland_Tour <- full_join(Deutschland, Tourismus)
+
+Tourismus <- Deutschland_Tour %>%
+  filter(Herkunft!="Bayern (ab 05/03) <80>",
+         Herkunft!="Baden Württemberg (ab 05/03) <81>",
+         Herkunft!="Nordrhein-Westfalen (ab 05/03) <82>",
+         Herkunft!="Mitteldeutschland (ab 05/03) <83>",
+         Herkunft!="Norddeutschland (ab 05/03) <84>",
+         Herkunft!="Ostdeutschland (ab 05/03) <85>",
+         Herkunft!="Berlin (bis 04/91 und ab 05/03) <53>",
+         Herkunft!="Deutschland (bis 04/03) <12>") %>%
+  select(-Herkunftsland_Code) %>%
+  arrange(desc(Ankünfte))
+
+rm(Deutschland)
+rm(Deutschland_Tour)
+
+Tourismus_1973 <- Tourismus_Herkunft %>%
+  filter(Monat<=200304) %>%
+  select(-Herkunftsland_Code) %>%
+  mutate(Herkunft=
+           case_when(Herkunft=="Österreich ohne Wien (bis 04/03) <02>" ~ "Österreich",
+                     Herkunft=="Wien <01>" ~ "Österreich",
+                     Herkunft=="Berlin (bis 04/91 und ab 05/03) <53>" ~ "Deutschland",
+                     Herkunft=="Deutschland (bis 04/03) <12>" ~ "Deutschland",
+                     TRUE ~ Herkunft))
+
+Tourismus_1973 <- full_join(Tourismus_1973, Tourismus)
+
+Tourismus_2020 <- Tourismus_1973 %>%
+  filter(Monat>=202000) %>%
+  group_by(Bundesland, Herkunft) %>%
+  summarise(Übernachtungen=sum(Übernachtungen),
+             Ankünfte=sum(Ankünfte)) %>%
+  mutate(`Ø Aufenthalt`=round(Übernachtungen/Ankünfte,2)) %>%
+  arrange(desc(Ankünfte))
+
+datatable(Tourismus_2020)
+
+```
+
+
+
+
+## Die Hauptgäste: Österreicher und Deutsche
+
+Österreichweit stellen Inlandstouristinnen und Deutsche die Hauptgästegruppen dar. Auch im Jahr 2020 war das der Fall, wobei, wohl covid-bedingt, die österreichischen Gäste mit ungewöhnlich großem Abstand an der Spitze liegen. Die folgende Tabelle zeigt in welchen Bundesländern welche Nationalitäten urlauben.
+
+
+
+```{r Herkunft, echo=FALSE, warning=F}
+
+Bdl_Herkunft <- Tourismus_2020 %>%
+  select(-Übernachtungen,
+         -`Ø Aufenthalt`) %>%
+  spread(Bundesland, Ankünfte) %>%
+  arrange(desc(Tirol))
+
+datatable(Bdl_Herkunft)
+
+```
+
+
+
+
+## Tirol
+
+
+Tirol empfängt mit großem Abstand die meisten Gäste und ist daher wie kein anderes Bundesland abhängig vom Tourismus und besonders von den deutschen Gästen, denn rund die Hälfte aller Touristen in Tirol kommt aus Deutschland, wie die folgende Tabelle zeigt.
+
+
+
+
+```{r Tirol, echo=FALSE, warning=F}
+
+Tirol <- Tourismus_1973 %>%
+  filter(Bundesland=="Tirol") %>%
+  select(-Bundesland, -Übernachtungen)
+
+Tirol$Monat <- str_c(Tirol$Monat, "01")
+Tirol$Monat <- ymd(Tirol$Monat)
+
+Tirol <- Tirol %>%
+  mutate(Jahr=year(Monat),
+         Monat=month(Monat))
+
+Tirol <- Tirol %>%
+  select(Jahr, Monat, Herkunft, Ankünfte) 
+
+Ankünfte_gesamt_Tirol <- sum(Tirol$Ankünfte)
+
+Tirol_Entwicklung <- Tirol %>%
+  group_by(Jahr, Herkunft) %>%
+  summarise(Ankünfte=sum(Ankünfte)) %>%
+  mutate(Jahresgäste=sum(Ankünfte)) %>%
+  mutate(Prozent=round(Ankünfte/Jahresgäste*100,2)) %>%
+  arrange(desc(Ankünfte)) %>%
+  arrange(desc(Jahr))
+
+datatable(Tirol_Entwicklung)
+
+```
+
+
+
+
+```{r Tirol_Reisegruppen, echo=FALSE, warning=F}
+
+Tirol_Reisegruppen <- Tirol %>%
+  group_by(Jahr, Herkunft) %>%
+  summarise(Ankünfte=sum(Ankünfte)) %>%
+  filter(Herkunft=="Deutschland" | Herkunft=="Österreich" | Herkunft =="Niederlande <25>" |
+           Herkunft=="Schweiz und Liechtenstein <32>" | Herkunft=="Belgien (ab 11/97) <62>" |
+           Herkunft=="Vereinigtes Königreich <16>" | Herkunft=="Tschechische Republik (ab 5/93) <09>" |
+           Herkunft=="Italien <20>" | Herkunft=="China (ab 05/03) <67>" | Herkunft== "Frankreich (einschl. Monaco) <14>") %>%
+  mutate(Ankünfte=Ankünfte/1000)
+
+ggplot(data=Tirol_Reisegruppen,
+       aes(x=Jahr,
+           y=Ankünfte,
+           color=Herkunft)) +
+  geom_line()+
+  scale_x_continuous(breaks=seq(1975,2020,5), limits=c(1975,2020))+
+  labs(x="Jahr",
+       y="Gäste in Tsd.",
+       title="Tourismus in Tirol",
+       subtitle="Gästeentwicklung seit 1975",
+       caption="Quelle: Statistik Austria")
+
+```
+
+
+
+
+
+## Gästeeinbruch 2020
+
+Aufgrund der Covidkrise sind die Tourismuszahlen in Tirol zunächst im März durch den ersten Lockdown extrem eingebrochen. Der Sommertourismus ist dann den Umständen entsprechend gut, jedoch deutlich unter den Vorjahreserfolgen verlaufen. Dramatisch stellt sich vor allem der Ausfall der Wintersaison 2020/21 dar. Die Hotels sind geschlossen, seit November sind die Touristenzahlen dementsprechend im Keller geglieben.
+
+
+```{r Grafik, echo=FALSE, warning=F}
+
+Tirol_2020 <- Tirol %>%
+  filter(Jahr>=2019) %>%
+  group_by(Monat, Jahr) %>%
+  summarise(Ankünfte=round(sum(Ankünfte)/1000))
+
+Tirol_2020$Jahr <- as.character(Tirol_2020$Jahr)
+
+ggplot(data=Tirol_2020,
+       aes(x=Monat,
+           y=Ankünfte,
+           color=Jahr)) +
+  geom_line()+
+  scale_x_continuous(breaks = seq(1,12), limits=c(1,12))+
+  labs(x="Monat",
+       y="Ankünfte in Tsd.",
+       title="Tourismuseinbruch in Tirol durch Covid",
+       subtitle="Entwicklung der Ankünfte 2019 & 2020",
+       caption="Quelle: Statistik Austria")
+
+```
+
+
+## Tirol und die Deutschen
+
+
+Die folgende Tabelle zeigt, wie sich die Ankünfte der deutschen Touristen in Tirol entwickelt haben. In totalen Zahlen und prozentuellen Veränderungen (Anmerkung @Chris: diese Zahlen sind für die Kitzbühel Mod)
+
+
+```{r Deutsche für Grafik, echo=FALSE}
+
+Tirol_Deutsche <- Tirol %>%
+  filter(Herkunft=="Deutschland") %>%
+  group_by(Jahr) %>%
+  summarise(Ankünfte=sum(Ankünfte)) %>%
+  arrange(Jahr) %>%
+  mutate(Vorjahr=lag(Ankünfte)) %>% 
+  mutate(Gästeentwicklung=Ankünfte-Vorjahr) %>%
+  mutate(`Prozentuelle Entwicklung`=round(Ankünfte/Vorjahr*100-100,2)) %>%
+  select(-Vorjahr) %>%
+  arrange(desc(Jahr))
+
+datatable(Tirol_Deutsche)
+
+```
+
+
+
+
+
